@@ -45,7 +45,7 @@ agree on exactly this.
 ```
 find_similar_function({
   code: string,        // required: the function the agent is about to write
-  language?: string,   // optional, default inferred ("python")
+  language?: string,   // optional, default inferred ("java")
   intent?: string,     // optional: NL description of what it's trying to do
   top_k?: int          // optional, default 3
 }) -> {
@@ -212,7 +212,7 @@ Order: make N0–N3 pass first, then run N4 on the curated case and record the b
 
 ## MVP scope (8-hour hackathon)
 
-**In:** Python only · single seeded repo · offline index · `find_similar_function` ·
+**In:** Java only · single seeded repo · offline index · `find_similar_function` ·
 CLI · MCP stdio server · before/after agent demo · the "determinism cherry" (run the
 same check twice → identical result) · a real precision/recall number from the held-out set.
 
