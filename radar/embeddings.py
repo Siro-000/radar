@@ -1,18 +1,18 @@
 import hashlib
-from openai import OpenAI
 
 from radar.models import Function
 
-MODEL = "text-embedding-3-small"
-_client: OpenAI | None = None
+MODEL_NAME = "jinaai/jina-embeddings-v2-base-code"
+_model = None
 _cache: dict[str, list[float]] = {}
 
 
-def _get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        _client = OpenAI()
-    return _client
+def _get_model():
+    global _model
+    if _model is None:
+        from sentence_transformers import SentenceTransformer
+        _model = SentenceTransformer(MODEL_NAME, trust_remote_code=True)
+    return _model
 
 
 def _cache_key(source_code: str) -> str:
@@ -27,16 +27,15 @@ def embed(function: Function) -> list[float]:
     key = _cache_key(function.source_code)
     if key in _cache:
         return _cache[key]
-    response = _get_client().embeddings.create(model=MODEL, input=_to_input(function))
-    vector = response.data[0].embedding
+    vector: list[float] = _get_model().encode(_to_input(function)).tolist()
     _cache[key] = vector
     return vector
 
 
 def embed_batch(functions: list[Function]) -> list[list[float]]:
     results: list[list[float] | None] = [None] * len(functions)
-    uncached_indices = []
-    uncached_inputs = []
+    uncached_indices: list[int] = []
+    uncached_inputs: list[str] = []
 
     for i, fn in enumerate(functions):
         key = _cache_key(fn.source_code)
@@ -47,9 +46,8 @@ def embed_batch(functions: list[Function]) -> list[list[float]]:
             uncached_inputs.append(_to_input(fn))
 
     if uncached_inputs:
-        response = _get_client().embeddings.create(model=MODEL, input=uncached_inputs)
-        for idx, item in zip(uncached_indices, response.data):
-            vector = item.embedding
+        vectors: list[list[float]] = _get_model().encode(uncached_inputs).tolist()
+        for idx, vector in zip(uncached_indices, vectors):
             key = _cache_key(functions[idx].source_code)
             _cache[key] = vector
             results[idx] = vector
