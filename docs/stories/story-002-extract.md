@@ -4,31 +4,37 @@
 
 ## Story
 
-As the detection engine, I need to extract all functions from a Python repository with their full metadata, so that they can be indexed and searched for semantic duplicates.
+As the detection engine, I need to extract all methods and functions from a Java repository with their full metadata, so that they can be indexed and searched for semantic duplicates.
 
 ## Acceptance Criteria
 
-1. [ ] `parse_file(path) -> list[Function]` extracts all functions from a single `.py` file
-2. [ ] `parse_repo(path) -> list[Function]` recursively walks all `.py` files in a directory
-3. [ ] Each `Function` includes `signature` — the full `def ...` line with type hints if present
-4. [ ] Functions shorter than 4 lines are skipped (too trivial to index)
-5. [ ] Class methods are extracted in addition to top-level functions
-6. [ ] `location` can be derived as `"file.py:start_line-end_line"` from the record fields
+1. [ ] `parse_file(path) -> list[Function]` extracts all methods from a single `.java` file
+2. [ ] `parse_repo(path) -> list[Function]` recursively walks all `.java` files in a directory
+3. [ ] Each `Function` includes `signature` — the full method signature line (visibility + return type + name + params)
+4. [ ] Methods shorter than 4 lines are skipped (too trivial to index)
+5. [ ] Instance methods, static methods and constructors are all extracted
+6. [ ] `location` can be derived as `"File.java:start_line-end_line"` from the record fields
 7. [ ] Files with syntax errors are skipped and logged to stderr — no crash
 
 ## Tasks
 
-- [ ] 1. Set up `tree-sitter` + `tree-sitter-python` parser
-- [ ] 2. Implement `parse_file(path: Path) -> list[Function]` — traverse `function_definition` AST nodes, capture name, lines, full source, and first line as signature
-- [ ] 3. Implement `parse_repo(repo_path: Path) -> list[Function]` — glob `**/*.py`, call `parse_file`, flatten
+- [ ] 1. Add `tree-sitter-java` dependency to `pyproject.toml`
+- [ ] 2. Implement `parse_file(path: Path) -> list[Function]` — traverse `method_declaration` and `constructor_declaration` AST nodes, capture name, lines, full source, and first line as signature
+- [ ] 3. Implement `parse_repo(repo_path: Path) -> list[Function]` — glob `**/*.java`, call `parse_file`, flatten
 - [ ] 4. Write tests:
-  - [ ] File with top-level functions and class methods
+  - [ ] File with instance methods, static methods and a constructor
   - [ ] File with a syntax error (must skip gracefully)
   - [ ] Empty repo returns empty list
 
 ## Dev Notes
 
-Use tree-sitter, not the `ast` stdlib module — tree-sitter handles partial/broken files. The `signature` field is the raw first line of the function source (the `def` line), not reconstructed — simpler and reliable.
+Use tree-sitter + `tree-sitter-java`, not a regex approach — tree-sitter handles partial/broken files gracefully. The `signature` field is the raw first line of the method source, not reconstructed.
+
+Java AST node types to target:
+- `method_declaration` — regular instance and static methods
+- `constructor_declaration` — constructors
+
+The `name` field maps to the method identifier node. The `file` field stores the relative path from the repo root.
 
 ## Dependencies
 
