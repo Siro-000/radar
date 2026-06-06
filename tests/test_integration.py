@@ -1,12 +1,12 @@
 """
-Integration tests for find_similar_function.
+Integration tests for find_similar_function against the frozen contract.
 
-These tests build a real Chroma index from the sample_repo fixture using
-deterministic mock embeddings, then verify:
-  - a known similar function appears in top-3
+Builds a real Chroma index from the sample_repo fixture using deterministic
+mock embeddings, then verifies:
+  - a known duplicate appears in matches
   - latency stays under 150 ms on a loaded index
-  - the 0.70 threshold is always respected
-  - result fields are complete
+  - the 0.70 threshold is always respected (no below-threshold matches)
+  - the frozen contract field names are present on every match
   - a missing index produces a clear error
 """
 import hashlib
@@ -26,11 +26,7 @@ DIM = 1536
 
 
 def _make_vec(pattern: str) -> list[float]:
-    """Return a deterministic unit vector derived from *pattern*.
-
-    In 1536-d, random unit vectors have expected cosine similarity ≈ 0,
-    so two distinct patterns will almost certainly be far apart.
-    """
+    """Deterministic unit vector — two distinct patterns have near-zero cosine similarity."""
     seed = int.from_bytes(hashlib.sha256(pattern.encode()).digest(), "big")
     vec: list[float] = []
     for _ in range(DIM):
@@ -41,7 +37,7 @@ def _make_vec(pattern: str) -> list[float]:
 
 
 _DISCOUNT_VEC = _make_vec("calculate_discount")
-_QUERY_VEC = _make_vec("calculate_discount")   # identical → cosine similarity = 1.0
+_QUERY_VEC = _make_vec("calculate_discount")    # identical → cosine similarity = 1.0
 _UNRELATED_VEC = _make_vec("send_email_smtp_totally_unrelated_xyz_9182736")
 
 
@@ -56,9 +52,8 @@ def reset_index():
 def loaded_index():
     """Build a real Chroma index from sample_repo with mock embeddings.
 
-    calculate_discount gets _DISCOUNT_VEC; every other function gets a
-    unique random-direction unit vector so they won't accidentally surface
-    in discount-related queries.
+    calculate_discount gets _DISCOUNT_VEC; every other function gets a unique
+    direction so it won't accidentally surface in discount-related queries.
     """
     functions = parse_repo(FIXTURES)
     embeddings = [
@@ -75,42 +70,43 @@ def loaded_index():
 
 def test_known_query_returns_correct_function_in_top3(loaded_index):
     with patch("radar.server.embed", return_value=_QUERY_VEC):
-        results = find_similar_function(
-            "def apply_discount(price, percent):\n    return price * (1 - percent / 100)"
+        result = find_similar_function(
+            code="def apply_discount(price, percent):\n    return price * (1 - percent / 100)"
         )
 
-    names = [r["name"] for r in results]
-    assert "calculate_discount" in names, f"Expected calculate_discount in results, got: {names}"
+    names = [m["name"] for m in result["matches"]]
+    assert "calculate_discount" in names, f"Expected calculate_discount in matches, got: {names}"
     assert names.index("calculate_discount") < 3, "calculate_discount should be in top-3"
 
 
 def test_latency_under_150ms(loaded_index):
     with patch("radar.server.embed", return_value=_QUERY_VEC):
         t0 = time.perf_counter()
-        find_similar_function("def compute_discount(price, rate): ...")
+        find_similar_function(code="def compute_discount(price, rate): ...")
         elapsed_ms = (time.perf_counter() - t0) * 1000
 
     assert elapsed_ms < 150, f"Query took {elapsed_ms:.1f} ms, expected < 150 ms"
 
 
 def test_threshold_always_respected(loaded_index):
-    """Every returned result must have score >= 0.70 — the threshold is server-side."""
+    """Every returned match must have similarity >= 0.70 — threshold is server-side."""
     with patch("radar.server.embed", return_value=_UNRELATED_VEC):
-        results = find_similar_function("def send_email(to, subject, body): ...")
+        result = find_similar_function(code="def send_email(to, subject, body): ...")
 
-    for r in results:
-        assert r["similarity_score"] >= 0.70, (
-            f"{r['name']} slipped through with score {r['similarity_score']}"
+    for m in result["matches"]:
+        assert m["similarity"] >= 0.70, (
+            f"{m['name']} slipped through with similarity {m['similarity']}"
         )
 
 
-def test_result_fields_complete(loaded_index):
+def test_result_fields_match_frozen_contract(loaded_index):
     with patch("radar.server.embed", return_value=_QUERY_VEC):
-        results = find_similar_function("def apply_discount(price, pct): ...")
+        result = find_similar_function(code="def apply_discount(price, pct): ...")
 
-    assert results, "Expected at least one result for a near-identical query"
-    assert set(results[0].keys()) == {
-        "name", "file", "start_line", "source_code", "similarity_score"
+    assert result["matches"], "Expected at least one match for a near-identical query"
+    assert set(result.keys()) == {"query_id", "verdict", "matches"}
+    assert set(result["matches"][0].keys()) == {
+        "match_id", "name", "signature", "location", "summary", "import_statement", "similarity"
     }
 
 
@@ -118,4 +114,4 @@ def test_index_not_loaded_raises_clear_error():
     assert server_module._index is None
     with patch("radar.server.embed", return_value=_QUERY_VEC):
         with pytest.raises(RuntimeError, match="Index not loaded"):
-            find_similar_function("def foo(): pass")
+            find_similar_function(code="def foo(): pass")

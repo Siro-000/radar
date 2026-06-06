@@ -1,3 +1,5 @@
+import hashlib
+import uuid
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -17,6 +19,9 @@ mcp = FastMCP(
 )
 
 _index: VectorIndex | None = None
+
+DUPLICATE_THRESHOLD = 0.85
+SIMILAR_THRESHOLD = 0.70
 
 
 def _get_index() -> VectorIndex:
@@ -42,38 +47,70 @@ def load_server(repo_path: str | Path, persist_path: str | Path | None = None) -
         _index = build_index(repo_path, persist_path=persist)
 
 
-@mcp.tool()
-def find_similar_function(query: str, k: int = 5) -> list[dict]:
-    """
-    Search for functions in the indexed repository that do the same thing as
-    the given code snippet or natural-language description.
+def _import_statement(file: str, name: str) -> str:
+    module = file.replace("\\", "/").removesuffix(".py").replace("/", ".")
+    return f"from {module} import {name}"
 
-    Call this before implementing any new function to reuse existing logic
-    instead of duplicating it.
+
+def _verdict(top_similarity: float) -> str:
+    if top_similarity >= DUPLICATE_THRESHOLD:
+        return "duplicate"
+    if top_similarity >= SIMILAR_THRESHOLD:
+        return "similar"
+    return "novel"
+
+
+def _match_id(query_code: str, candidate_file: str, candidate_name: str) -> str:
+    key = f"{query_code}::{candidate_file}::{candidate_name}"
+    return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+@mcp.tool()
+def find_similar_function(
+    code: str,
+    language: str = "python",
+    intent: str = "",
+    top_k: int = 3,
+) -> dict:
+    """
+    Search the indexed repository for functions that do the same thing as the
+    given code snippet. Call this before implementing any new function to reuse
+    existing logic instead of duplicating it.
 
     Args:
-        query: Source code of the function you are about to write, or a
-               natural-language description of its intended behavior.
-        k:     Maximum number of candidates to return (default 5).
+        code:     Source code of the function you are about to write.
+        language: Programming language hint (default "python").
+        intent:   Optional natural-language description of intended behavior.
+        top_k:    Maximum number of candidates to return (default 3).
 
     Returns:
-        List of candidates ordered by similarity (highest first), each with
-        name, file, start_line, source_code, and similarity_score.
-        Empty list if no candidates exceed the 0.70 similarity threshold.
+        A dict with query_id, verdict ("duplicate"/"similar"/"novel"), and a
+        matches list. Each match includes name, signature, location, summary,
+        import_statement, and similarity. Empty matches list when verdict is
+        "novel".
     """
-    dummy = Function(name="query", file="", start_line=0, end_line=0, source_code=query)
+    dummy = Function(name="query", file="", start_line=0, end_line=0, source_code=code)
     query_embedding = embed(dummy)
 
-    results: list[SearchResult] = _get_index().search(query_embedding, k=k)
-    threshold = 0.70
-    return [
+    raw: list[SearchResult] = _get_index().search(query_embedding, k=top_k)
+    matches_above = [r for r in raw if r.score >= SIMILAR_THRESHOLD]
+    top_score = matches_above[0].score if matches_above else 0.0
+
+    matches = [
         {
+            "match_id": _match_id(code, r.function.file, r.function.name),
             "name": r.function.name,
-            "file": r.function.file,
-            "start_line": r.function.start_line,
-            "source_code": r.function.source_code,
-            "similarity_score": r.score,
+            "signature": r.function.source_code.strip().splitlines()[0],
+            "location": f"{r.function.file}:{r.function.start_line}-{r.function.end_line}",
+            "summary": f"Function to {r.function.name.replace('_', ' ')} (in {r.function.file})",
+            "import_statement": _import_statement(r.function.file, r.function.name),
+            "similarity": r.score,
         }
-        for r in results
-        if r.score >= threshold
+        for r in matches_above
     ]
+
+    return {
+        "query_id": str(uuid.uuid4()),
+        "verdict": _verdict(top_score),
+        "matches": matches,
+    }

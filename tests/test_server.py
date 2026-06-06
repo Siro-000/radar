@@ -31,19 +31,19 @@ def test_find_similar_function_returns_above_threshold():
     mock_index = MagicMock(spec=VectorIndex)
     mock_index.search.return_value = [
         make_search_result("calculate_tax", 0.92),
-        make_search_result("apply_discount", 0.65),  # below threshold
+        make_search_result("apply_discount", 0.65),  # below threshold — must be filtered
     ]
     server_module._index = mock_index
 
     with patch("radar.server.embed", return_value=[0.1] * 10):
-        results = server_module.find_similar_function("compute tax on price")
+        result = server_module.find_similar_function(code="compute tax on price")
 
-    assert len(results) == 1
-    assert results[0]["name"] == "calculate_tax"
-    assert results[0]["similarity_score"] == 0.92
+    assert len(result["matches"]) == 1
+    assert result["matches"][0]["name"] == "calculate_tax"
+    assert result["matches"][0]["similarity"] == 0.92
 
 
-def test_find_similar_function_empty_when_no_match():
+def test_find_similar_function_novel_when_no_match():
     mock_index = MagicMock(spec=VectorIndex)
     mock_index.search.return_value = [
         make_search_result("unrelated", 0.30),
@@ -51,9 +51,10 @@ def test_find_similar_function_empty_when_no_match():
     server_module._index = mock_index
 
     with patch("radar.server.embed", return_value=[0.1] * 10):
-        results = server_module.find_similar_function("something completely different")
+        result = server_module.find_similar_function(code="something completely different")
 
-    assert results == []
+    assert result["matches"] == []
+    assert result["verdict"] == "novel"
 
 
 def test_find_similar_function_result_fields():
@@ -62,15 +63,18 @@ def test_find_similar_function_result_fields():
     server_module._index = mock_index
 
     with patch("radar.server.embed", return_value=[0.1] * 10):
-        results = server_module.find_similar_function("foo logic")
+        result = server_module.find_similar_function(code="foo logic")
 
-    assert set(results[0].keys()) == {"name", "file", "start_line", "source_code", "similarity_score"}
+    assert set(result.keys()) == {"query_id", "verdict", "matches"}
+    assert set(result["matches"][0].keys()) == {
+        "match_id", "name", "signature", "location", "summary", "import_statement", "similarity"
+    }
 
 
 def test_find_similar_function_raises_without_index():
     with patch("radar.server.embed", return_value=[0.1] * 10):
         with pytest.raises(RuntimeError, match="Index not loaded"):
-            server_module.find_similar_function("anything")
+            server_module.find_similar_function(code="anything")
 
 
 def test_build_index_calls_parse_embed_and_add(tmp_path):
