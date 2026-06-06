@@ -1,7 +1,7 @@
 ---
 id: RADAR-001
 title: Parser de funciones
-status: todo
+status: done
 ---
 
 ## Historia
