@@ -1,0 +1,22 @@
+[
+  {
+    "query_code": "def parse_date(s):\n    from datetime import datetime\n    return datetime.fromisoformat(s)",
+    "expected_match": "parse_iso_date",
+    "is_duplicate": true
+  },
+  {
+    "query_code": "def apply_discount(price, pct):\n    if pct < 0 or pct > 100:\n        raise ValueError('bad percentage')\n    return price - price * pct / 100",
+    "expected_match": "calculate_discount",
+    "is_duplicate": true
+  },
+  {
+    "query_code": "def get_page(lst, n, size=10):\n    if n < 1:\n        raise ValueError('page must be >= 1')\n    s = (n - 1) * size\n    return lst[s:s + size]",
+    "expected_match": "paginate_results",
+    "is_duplicate": true
+  },
+  {
+    "query_code": "def add(a, b):\n    return a + b",
+    "expected_match": null,
+    "is_duplicate": false
+  }
+]
