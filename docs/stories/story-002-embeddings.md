@@ -1,7 +1,7 @@
 ---
 id: RADAR-002
 title: Embeddings de intención algorítmica
-status: todo
+status: done
 ---
 
 ## Historia

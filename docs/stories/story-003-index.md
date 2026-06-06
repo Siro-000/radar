@@ -1,7 +1,7 @@
 ---
 id: RADAR-003
 title: Índice vectorial
-status: todo
+status: done
 ---
 
 ## Historia
