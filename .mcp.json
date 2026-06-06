@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "radar": {
+      "command": "uv",
+      "args": [
+        "run",
+        "radar",
+        "serve",
+        "--repo",
+        ".",
+        "--index-path",
+        ".radar-index"
+      ]
+    }
+  }
+}

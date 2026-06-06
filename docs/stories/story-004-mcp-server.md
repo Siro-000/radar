@@ -1,7 +1,7 @@
 ---
 id: RADAR-004
 title: Servidor MCP
-status: todo
+status: done
 ---
 
 ## Historia
