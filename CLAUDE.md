@@ -76,8 +76,13 @@ find_similar_function({
 
 - **Python 3.11+**
 - **tree-sitter** + `tree-sitter-python` — function extraction (MVP: Python only)
-- **Embedder** — `jina-embeddings-v2-base-code`. Wrap it behind `engine/embed.py` so the rest of the code never
-  imports the model directly — swapping models must be a one-file change.
+- **Embedder** — `jina-embeddings-v2-base-code` (137M params, code-specialized, runs on
+  CPU in seconds). It is **deprecated** by Jina but **chosen deliberately** for the MVP
+  precisely because it is tiny and CPU-friendly. Do NOT "upgrade" it to
+  `jina-embeddings-v4` — that's a 3.8B model and won't run comfortably on a laptop without
+  a GPU; swapping to a current encoder is a post-MVP task. Wrap the model behind
+  `engine/embed.py` so the rest of the code never imports it directly — changing models
+  must be a one-file change.
 - **faiss-cpu** — kNN index
 - **MCP Python SDK** — stdio server (local; this is the demo-ready form, no hosting)
 - **sqlite** (or a JSON file for the MVP) — metadata store mapping vector id → metadata
@@ -98,6 +103,10 @@ radar/
     mcp_server.py    # thin MCP stdio server exposing find_similar_function
   eval/
     eval.py          # precision/recall vs the held-out set (calls engine directly)
+  tests/
+    test_smoke.py        # N0: index seed repo, a known duplicate comes back as a match
+    test_determinism.py  # N2: same input twice -> byte-identical output
+    test_contract.py     # output shape matches the frozen contract
   data/
     seed_repo/       # demo asset: a Python repo with planted duplicates
     heldout.json     # known duplicate pairs for the precision/recall number
@@ -126,9 +135,63 @@ python -m radar.adapters.cli "def my_func(...): ..."
 # run the MCP server (stdio)
 python -m radar.adapters.mcp_server
 
-# eval: precision/recall against the held-out set
+# run tests (N0/N2 + contract shape)
+pytest
+
+# eval: precision/recall against the held-out set (N1 — calibrate the threshold here)
 python -m radar.eval.eval
+
+# register the MCP server with Claude Code for the agent demo (use an ABSOLUTE path)
+claude mcp add --transport stdio radar -- python /abs/path/to/radar/adapters/mcp_server.py
+claude mcp list          # verify it registered; inside a session, /mcp shows status
+# --scope project writes .mcp.json (committable, shared with the team)
 ```
+
+## Testing
+
+**Test the engine deterministically; the agent A/B is the demo, not a test.** Never
+validate recall quality *through* the agent: if the agent doesn't reuse, you can't tell
+whether the recall missed the duplicate or the agent ignored the match it received. Five
+levels, cheap to expensive:
+
+- **N0 — Smoke (`tests/test_smoke.py`).** Index the seed repo, call
+  `find_similar_function` with a known duplicate, assert it returns as a match. Direct
+  Python call, no MCP, no agent.
+- **N1 — Recall quality (`eval/eval.py`).** Run the engine over the held-out set, compute
+  precision/recall at the threshold. **This is where you calibrate.** Deterministic and
+  fast — iterate the threshold here, not through the agent.
+- **N2 — Determinism (`tests/test_determinism.py`).** Same input twice → identical
+  output. Trivial, but it's the product's whole claim, so assert it.
+- **N3 — MCP transport.** Confirm the server exposes the tool and returns well-formed
+  JSON over stdio, using a minimal client or the MCP inspector — **not** the agent.
+  Separates protocol bugs from logic bugs.
+- **N4 — Agent A/B (the demo).** Two Claude Code sessions, with and without the tool,
+  same prompt. Run last, on a curated case.
+
+Held-out format (`data/heldout.json`):
+
+```json
+[
+  {"query_code": "def parse(s):\n  return datetime.fromisoformat(s)",
+   "expected_match": "parse_iso_date", "is_duplicate": true},
+  {"query_code": "def add(a, b): return a + b",
+   "expected_match": null, "is_duplicate": false}
+]
+```
+
+Agent A/B demo — three gotchas that decide whether it works:
+
+1. **Plant the duplicates yourself** in `data/seed_repo` (don't grab a random OSS repo).
+   You control exactly what's duplicated → reliable demo + it doubles as ground truth.
+2. **The agent does NOT call tools on its own — instruct it.** In the seed repo's own
+   CLAUDE.md (or the prompt), tell it: "before writing a new function, call
+   `find_similar_function` with the code you intend to write; if it returns a duplicate,
+   reuse the import instead of rewriting." The real contrast is *instructed agent with the
+   tool available* vs *agent without the tool*.
+3. **With** = `claude mcp add ... radar`. **Without** = run in a directory where that MCP
+   isn't configured (or `claude mcp remove radar`). Same prompt, same instruction.
+
+Order: make N0–N3 pass first, then run N4 on the curated case and record the backup video.
 
 ## Conventions and invariants — do not break
 
@@ -142,6 +205,9 @@ python -m radar.eval.eval
   a false positive (agent reuses something it shouldn't) introduces a subtle bug, and
   false positives are the #1 product risk. Better to miss a duplicate than flag a fake one.
 - **`match_id` identifies the pair** (query ↔ candidate), not just the candidate.
+- **MCP stdio hygiene.** The server must write **only MCP protocol to stdout**. All
+  logging goes to **stderr**. A stray `print()` to stdout corrupts the stdio transport —
+  this is the #1 "connects but doesn't respond" bug.
 - **Adapters stay thin.** All logic lives in `engine/`.
 
 ## MVP scope (8-hour hackathon)
@@ -160,13 +226,13 @@ The two things most likely to blow up late are the **MCP↔client connection** a
 **recall quality (false positives)**. Attack both early.
 
 0. **Setup (~45m, together):** skeleton, deps, freeze the contract + function-record
-   shape, lock the embedder, confirm it embeds a string on CPU.
+   shape, confirm the embedder embeds a string on CPU.
 1. **Engine (biggest):** extract → normalize → embed all → FAISS + metadata → query
-   function. Test with a flat script. Leave time to calibrate the threshold.
+   function. Test with N0 + the eval. Leave time to calibrate the threshold (N1).
 2. **MCP smoke test (early, in parallel):** stand up a stdio server with a dummy tool,
    connect Claude Code / Cursor, confirm the agent calls it — before the engine is done.
 3. **Wire the real engine into the MCP.**
-4. **Demo:** polish the before/after, the determinism cherry, compute the number.
+4. **Demo:** polish the before/after (N4), the determinism cherry, compute the number.
 5. **Freeze + safety net:** rehearse, record a backup video of the working demo.
 
 **Degraded-but-dignified fallback:** if the MCP↔client chain isn't alive in time, the
@@ -178,6 +244,8 @@ That still proves recall and reproducibility.
 - Don't put an LLM in the query critical path.
 - Don't change the contract after T0 without telling everyone.
 - Don't reindex on query.
+- Don't print to stdout in the MCP server — logs go to stderr.
+- Don't "upgrade" the embedder to jina-embeddings-v4 (3.8B; won't run on CPU).
+- Don't validate recall quality through the agent — use the held-out set.
 - Don't build the human loop, the async pipeline, or the 3D graph for the hackathon.
 - Don't let detection logic leak into an adapter.
-
