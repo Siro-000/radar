@@ -65,38 +65,23 @@ Before implementing any new function, call `find_similar_function`.
 
 ## Running the demo
 
-### Step 1 — Prepare the workspace
+Run both commands from the repo root (`radar/radar`).
+
+### Step 1 — Build the workspace
 
 ```bash
 bash demo/run_prueba.sh
 ```
 
-Generates a realistic Java e-commerce repo with 3 hidden semantic duplicates and builds the Radar index. Takes ~30 seconds on first run (embedder download).
+Creates `../prueba/con/` with a realistic Java e-commerce repo (3 semantic duplicates planted), builds the Radar index inside it, and writes the MCP config at `../prueba/radar.mcp.json`. Takes ~30 seconds on first run while the embedder downloads.
 
 ### Step 2 — Run the agent
-
-Open Claude Code in `../prueba/con` and paste the prompt below, or run headlessly:
 
 ```bash
 bash demo/arm_con.sh
 ```
 
-**Prompt:**
-
-```
-Add sales commission tracking to the platform.
-
-Create src/com/acme/commerce/sales/CommissionCalculator.java with a public class
-CommissionCalculator that exposes:
-
-    public static double calculateCommission(double saleAmount, double commissionRate)
-
-A sales agent earns a percentage on top of every sale. The method returns the total
-amount — sale price plus the agent's commission. Follow the existing package conventions
-and reuse utilities where appropriate.
-```
-
-Token summary is printed at the end of the headless run:
+Launches Claude headlessly in `../prueba/con` with Radar connected via the MCP config. The agent is instructed to call `find_similar_function` before writing any new function. Live output streams to your terminal; a token summary prints at the end:
 
 ```
 ==================================================
@@ -114,9 +99,14 @@ Token summary is printed at the end of the headless run:
 
 ### What to look for
 
-The repo already has `TaxCalculator.calculateTax(price, rate)` — same math as the function the agent needs to write. It also has `LevyEngine.applyLevy(amount, factor)` in the billing package: identical logic but with no tax/sale/commission vocabulary, so a keyword search misses it entirely.
+The task asks the agent to implement `calculateCommission(saleAmount, rate)` — percentage-on-top arithmetic. The repo already has two functions with that exact logic:
 
-One call to `find_similar_function` surfaces the match. The agent reads the source, recognises the duplicate, and imports it instead of reimplementing.
+- `TaxCalculator.calculateTax(price, rate)` — same math, tax vocabulary
+- `LevyEngine.applyLevy(amount, factor)` — same math, billing vocabulary, zero shared keywords
+
+A keyword search finds neither. Radar finds both.
+
+When it works: the agent calls `find_similar_function`, gets back the candidate with full source, recognises the match, and writes an import instead of reimplementing the arithmetic.
 
 ---
 ---
@@ -188,41 +178,31 @@ Antes de implementar cualquier función nueva, llamá `find_similar_function`.
 
 ## Cómo correr la demo
 
+Ambos comandos se corren desde la raíz del repo (`radar/radar`).
+
 ### Paso 1 — Preparar el workspace
 
 ```bash
 bash demo/run_prueba.sh
 ```
 
-Genera un repo Java de e-commerce realista con 3 duplicados semánticos ocultos y construye el índice Radar. Tarda ~30 segundos la primera vez (descarga del embedder).
+Crea `../prueba/con/` con un repo Java de e-commerce realista (3 duplicados semánticos plantados), construye el índice Radar adentro y escribe la config MCP en `../prueba/radar.mcp.json`. Tarda ~30 segundos la primera vez mientras descarga el embedder.
 
 ### Paso 2 — Correr el agente
-
-Abrí Claude Code en `../prueba/con` y pegá el prompt de abajo, o correlo de forma automática:
 
 ```bash
 bash demo/arm_con.sh
 ```
 
-**Prompt:**
-
-```
-Agregar seguimiento de comisiones de ventas a la plataforma.
-
-Crear src/com/acme/commerce/sales/CommissionCalculator.java con una clase pública
-CommissionCalculator que exponga:
-
-    public static double calculateCommission(double saleAmount, double commissionRate)
-
-Un agente de ventas gana un porcentaje sobre cada venta. El método retorna el monto
-total — precio de venta más la comisión del agente. Seguir las convenciones del
-paquete existente y reutilizar utilidades donde corresponda.
-```
-
-El resumen de tokens se imprime al final de la ejecución automática.
+Lanza Claude de forma automática en `../prueba/con` con Radar conectado vía la config MCP. El agente tiene instrucción de llamar `find_similar_function` antes de escribir cualquier función nueva. El output se muestra en tiempo real; al final se imprime el resumen de tokens.
 
 ### Qué mirar
 
-El repo ya tiene `TaxCalculator.calculateTax(price, rate)` — la misma matemática que la función que el agente necesita escribir. También tiene `LevyEngine.applyLevy(amount, factor)` en el paquete de facturación: lógica idéntica pero sin ninguna palabra clave de comisión, venta ni impuesto, así que una búsqueda por texto no lo encuentra.
+La tarea le pide al agente implementar `calculateCommission(saleAmount, rate)` — aritmética de porcentaje sobre un monto. El repo ya tiene dos funciones con exactamente esa lógica:
 
-Una llamada a `find_similar_function` devuelve el candidato. El agente lee el código fuente, reconoce el duplicado y lo importa en lugar de reimplementarlo.
+- `TaxCalculator.calculateTax(price, rate)` — misma matemática, vocabulario de impuestos
+- `LevyEngine.applyLevy(amount, factor)` — misma matemática, vocabulario de facturación, sin ninguna palabra clave en común
+
+Una búsqueda por texto no encuentra ninguna. Radar encuentra ambas.
+
+Cuando funciona: el agente llama `find_similar_function`, recibe el candidato con el código fuente completo, reconoce el duplicado y escribe un import en lugar de reimplementar la aritmética.
