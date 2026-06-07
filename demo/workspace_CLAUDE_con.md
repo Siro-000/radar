@@ -1,0 +1,1 @@
+Before implementing any new function, call `find_similar_function` with the code you intend to write. If the result is `candidate`, reuse the existing function via import instead of reimplementing it.

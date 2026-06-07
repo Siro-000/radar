@@ -38,7 +38,7 @@ The script asks whether you want to register Radar **globally** (all projects) o
 
 ### Option A — Global (any project)
 
-The script registers Radar in Claude Code with `claude mcp add --global`. Then, for each project you want to use it in, add two lines to its `CLAUDE.md`:
+The script registers Radar in Claude Code with `claude mcp add -s user`. Then, for each project you want to use it in, add two lines to its `CLAUDE.md`:
 
 ```markdown
 On startup, call `index_repo` with the absolute path of this project.
@@ -63,6 +63,119 @@ Before implementing any new function, call `find_similar_function`.
 
 ---
 
+## Running the demo
+
+### Step 1 — Prepare the workspaces
+
+```bash
+bash demo/run_prueba.sh
+```
+
+Generates a realistic Java e-commerce repo with 3 hidden semantic duplicates, copies it into two identical workspaces (`sin/` and `con/`), and builds the Radar index on the `con/` workspace. Takes ~30 seconds on first run (embedder download).
+
+### Step 2 — Give Claude this prompt in each repo
+
+Open Claude Code in each workspace and paste the prompt below, or run the scripts to get token output automatically.
+
+**Prompt:**
+
+```
+Add sales commission tracking to the platform.
+
+Create src/com/acme/commerce/sales/CommissionCalculator.java with a public class
+CommissionCalculator that exposes:
+
+    public static double calculateCommission(double saleAmount, double commissionRate)
+
+A sales agent earns a percentage on top of every sale. The method returns the total
+amount — sale price plus the agent's commission. Follow the existing package conventions
+and reuse utilities where appropriate.
+```
+
+**Without Radar** — open Claude Code in `../prueba/sin`, paste the prompt, and run `/cost` at the end to see token usage:
+
+```bash
+cd ../prueba/sin
+claude
+# paste the prompt, let it run, then type: /cost
+```
+
+Or run headlessly and get the token summary automatically:
+
+```bash
+bash demo/arm_sin.sh
+```
+
+**With Radar** — same in `../prueba/con`:
+
+```bash
+cd ../prueba/con
+claude
+# paste the prompt, let it run, then type: /cost
+```
+
+Or headlessly:
+
+```bash
+bash demo/arm_con.sh
+```
+
+Token summary from `/cost` (interactive) or printed at the end of each headless run:
+
+```
+==================================================
+  TOKENS GASTADOS
+==================================================
+  turns            : 3
+  input tokens     : 4,821
+  cache read       : 12,043
+  output tokens    : 287
+  total tokens     : 17,151
+  costo (USD)      : $0.0312
+  tiempo           : 18.4s
+==================================================
+```
+
+### What to look for
+
+The repo already has `TaxCalculator.calculateTax(price, rate)` — same math as what both agents need to write. It also has `LevyEngine.applyLevy(amount, factor)` in the billing package: identical logic but with no tax/sale/commission vocabulary, so a keyword search misses it entirely.
+
+- **Without Radar**: the agent has no way to discover either function. It writes the arithmetic inline.
+- **With Radar**: one call to `find_similar_function` surfaces the match. The agent reads the source, recognises the duplicate, and imports it instead of reimplementing.
+
+The contrast is not just correctness — it's how the agent gets there. Without the tool, there is no discovery path on a repo too large to read exhaustively.
+
+---
+---
+
+# Radar (Español)
+
+Capa de recuperación semántica que previene que los agentes de IA dupliquen lógica que ya existe en el codebase.
+
+## Qué hace
+
+Los agentes de IA generan código sin ver el codebase completo en el que trabajan. El resultado medible: reescriben lógica que ya existe en lugar de reutilizarla, inflando los repositorios con duplicación que luego hay que mantener.
+
+Radar entiende *qué* hace cada función de un repositorio — no cómo está escrita — y expone ese conocimiento donde se toman las decisiones de código.
+
+## Cómo funciona
+
+Arquitectura en embudo (recuperar y reordenar):
+
+1. **Búsqueda vectorial** — reduce millones de funciones a un puñado de candidatos en milisegundos, de forma determinista
+2. **Reordenamiento con LLM** (opcional) — juzga si los candidatos son duplicados reales
+
+## Superficies
+
+- **CI gate** — bloquea PRs con duplicación detectada
+- **Integración IDE / agente** — antes de generar una función, verifica si la lógica ya existe
+
+## Estado
+
+En desarrollo.
+
+---
+
 ## Uso en cualquier repositorio (local)
 
 Corré el script de setup — instala dependencias y registra el servidor MCP en un solo paso:
@@ -75,7 +188,7 @@ El script te pregunta si querés registrarlo **globalmente** (disponible en todo
 
 ### Opción A — Global (cualquier proyecto)
 
-El script registra Radar en Claude Code con `claude mcp add --global`. Una vez hecho, en cada proyecto que quieras usarlo agregá dos líneas al `CLAUDE.md`:
+El script registra Radar en Claude Code con `claude mcp add -s user`. Una vez hecho, en cada proyecto que quieras usarlo agregá dos líneas al `CLAUDE.md`:
 
 ```markdown
 Al iniciar, llamá `index_repo` con la ruta absoluta de este proyecto.
@@ -97,3 +210,71 @@ Antes de implementar cualquier función nueva, llamá `find_similar_function`.
 - Al terminar el setup, verificá la conexión con `claude mcp list`.
 - El índice global se guarda en `~/.radar-index`. Si cambiás de repo, el agente llama `index_repo` de nuevo para reconstruirlo.
 - Si el repo cambia (agregaste funciones), volvé a llamar `index_repo`.
+
+---
+
+## Cómo correr la demo
+
+### Paso 1 — Preparar los workspaces
+
+```bash
+bash demo/run_prueba.sh
+```
+
+Genera un repo Java de e-commerce realista con 3 duplicados semánticos ocultos, lo copia en dos workspaces idénticos (`sin/` y `con/`) y construye el índice Radar sobre el workspace `con/`. Tarda ~30 segundos la primera vez (descarga del embedder).
+
+### Paso 2 — Dale este prompt a Claude en cada repo
+
+Abrí Claude Code en cada workspace y pegá el prompt de abajo, o corré los scripts para obtener el resumen de tokens automáticamente.
+
+**Prompt:**
+
+```
+Agregar seguimiento de comisiones de ventas a la plataforma.
+
+Crear src/com/acme/commerce/sales/CommissionCalculator.java con una clase pública
+CommissionCalculator que exponga:
+
+    public static double calculateCommission(double saleAmount, double commissionRate)
+
+Un agente de ventas gana un porcentaje sobre cada venta. El método retorna el monto
+total — precio de venta más la comisión del agente. Seguir las convenciones del
+paquete existente y reutilizar utilidades donde corresponda.
+```
+
+**Sin Radar** — abrí Claude Code en `../prueba/sin`, pegá el prompt y al terminar escribí `/cost` para ver el consumo:
+
+```bash
+cd ../prueba/sin
+claude
+# pegá el prompt, dejá que resuelva, después escribí: /cost
+```
+
+O de forma automática con el resumen al final:
+
+```bash
+bash demo/arm_sin.sh
+```
+
+**Con Radar** — igual en `../prueba/con`:
+
+```bash
+cd ../prueba/con
+claude
+# pegá el prompt, dejá que resuelva, después escribí: /cost
+```
+
+O de forma automática:
+
+```bash
+bash demo/arm_con.sh
+```
+
+### Qué mirar
+
+El repo ya tiene `TaxCalculator.calculateTax(price, rate)` — la misma matemática que los dos agentes necesitan escribir. También tiene `LevyEngine.applyLevy(amount, factor)` en el paquete de facturación: lógica idéntica pero sin ninguna palabra clave de comisión, venta ni impuesto, así que una búsqueda por texto no lo encuentra.
+
+- **Sin Radar**: el agente no tiene forma de descubrir ninguna de las dos funciones. Escribe la aritmética inline.
+- **Con Radar**: una llamada a `find_similar_function` devuelve el candidato. El agente lee el código fuente, reconoce el duplicado y lo importa en lugar de reimplementarlo.
+
+El contraste no es solo de corrección — es cómo el agente llega al resultado. Sin la herramienta, no hay camino de descubrimiento en un repo demasiado grande para leer exhaustivamente.

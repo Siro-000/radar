@@ -15,18 +15,25 @@ echo "       Done."
 echo ""
 
 # Step 2: register the MCP server
-echo "[ 2/2 ] How do you want to register the MCP server?"
-echo ""
-echo "  1) Global  — available in every project you open in Claude Code"
-echo "  2) Project — only available in one specific repo (writes .mcp.json there)"
-echo ""
-read -rp "Choose [1/2]: " choice
+# Accept choice as argument: --global (or 1) / --project PATH (or 2)
+case "${1:-}" in
+  --global|1) choice=1 ;;
+  --project|2) choice=2; project_path="${2:-}" ;;
+  *)
+    echo "[ 2/2 ] How do you want to register the MCP server?"
+    echo ""
+    echo "  1) Global  — available in every project you open in Claude Code"
+    echo "  2) Project — only available in one specific repo (writes .mcp.json there)"
+    echo ""
+    read -rp "Choose [1/2]: " choice
+    ;;
+esac
 
 case "$choice" in
   1)
     echo ""
     echo "Registering Radar globally..."
-    claude mcp add --global radar \
+    claude mcp add -s user radar -- \
       uv --directory "$RADAR_DIR" run radar serve \
       --index-path "$HOME/.radar-index"
     echo ""
@@ -39,7 +46,9 @@ case "$choice" in
     ;;
   2)
     echo ""
-    read -rp "Absolute path to the project repo: " project_path
+    if [[ -z "${project_path:-}" ]]; then
+      read -rp "Absolute path to the project repo: " project_path
+    fi
     if [[ ! -d "$project_path" ]]; then
       echo "Error: '$project_path' is not a directory." >&2
       exit 1
