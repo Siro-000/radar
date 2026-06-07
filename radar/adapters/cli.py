@@ -77,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     p_query.set_defaults(func=_cmd_query)
 
     p_serve = sub.add_parser("serve", help="run the MCP stdio server")
-    p_serve.add_argument("--repo", default=".", help="repo to index on startup if no index exists")
+    p_serve.add_argument("--repo", default=None, help="repo to index on startup if no index exists (optional)")
     p_serve.add_argument("--index-path", default=DEFAULT_INDEX_PATH)
     p_serve.set_defaults(func=_cmd_serve)
 

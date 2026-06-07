@@ -27,6 +27,8 @@ from radar.engine.engine import load_index
 
 mcp = FastMCP("radar")
 
+_index_path: Path | None = None  # set once in run_server, shared with index_repo
+
 
 def _log(msg: str) -> None:
     print(f"[radar] {msg}", file=sys.stderr, flush=True)
@@ -59,8 +61,36 @@ def find_similar_function(
         intent: Optional natural-language description of what it should do.
         top_k: Max number of candidate matches to return (default 3).
     """
-    result = _engine_find(code=code, language=language, intent=intent, top_k=top_k)
-    return result.model_dump()
+    try:
+        result = _engine_find(code=code, language=language, intent=intent, top_k=top_k)
+        return result.model_dump()
+    except RuntimeError:
+        return {"error": "No index loaded. Call index_repo(repo_path=<absolute path>) first."}
+
+
+@mcp.tool(
+    name="index_repo",
+    description=(
+        "Index a repository so find_similar_function can search it. "
+        "Call this once (or whenever the repo changes) before querying. "
+        "Pass the absolute path to the repo root as `repo_path`. "
+        "The index is written to the path configured at server startup and "
+        "reloaded in memory immediately — no restart needed."
+    ),
+)
+def index_repo(repo_path: str) -> dict:
+    """Build (or rebuild) the FAISS index from ``repo_path`` and reload it.
+
+    Args:
+        repo_path: Absolute path to the repository root to index.
+    """
+    if _index_path is None:
+        raise RuntimeError("Server not fully initialised (index_path unknown).")
+    with contextlib.redirect_stdout(sys.stderr):
+        build_index(repo_path, _index_path)
+        load_index(_index_path)
+    _log(f"index rebuilt from {repo_path!r} and reloaded")
+    return {"status": "ok", "indexed_repo": repo_path, "index_path": str(_index_path)}
 
 
 def _warmup() -> None:
@@ -73,21 +103,30 @@ def _warmup() -> None:
         _log(f"warmup skipped: {exc}")
 
 
-def run_server(repo: str, index_path: str) -> None:
-    """Ensure an index exists at ``index_path`` (building from ``repo`` if absent),
-    load it, warm up the model, then serve ``find_similar_function`` over stdio."""
-    idx = Path(index_path)
+def run_server(repo: str | None, index_path: str) -> None:
+    """Start the MCP server.
 
-    # Setup phase: anything below may print to stdout (model loaders, faiss, etc.).
-    # Redirect it to stderr so the stdio MCP transport stays clean.
+    If an index already exists at ``index_path``, load it.
+    If not and ``repo`` is given, build the index from ``repo`` first.
+    If not and no ``repo`` is given, start empty — the agent must call
+    ``index_repo`` before querying.
+    """
+    global _index_path
+    idx = Path(index_path)
+    _index_path = idx
+
     with contextlib.redirect_stdout(sys.stderr):
         if (idx / "index.faiss").exists():
             _log(f"loading existing index at {idx}")
-        else:
+            load_index(idx)
+            _warmup()
+        elif repo:
             _log(f"no index at {idx}; building from repo '{repo}' ...")
             build_index(repo, idx)
-        load_index(idx)
-        _warmup()
+            load_index(idx)
+            _warmup()
+        else:
+            _log(f"no index at {idx} — call index_repo() to build one")
 
     _log("ready — serving find_similar_function over MCP stdio")
     mcp.run()  # FastMCP defaults to the stdio transport
