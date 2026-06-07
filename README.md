@@ -65,17 +65,21 @@ Before implementing any new function, call `find_similar_function`.
 
 ## Running the demo
 
-### Step 1 — Prepare the workspaces
+### Step 1 — Prepare the workspace
 
 ```bash
 bash demo/run_prueba.sh
 ```
 
-Generates a realistic Java e-commerce repo with 3 hidden semantic duplicates, copies it into two identical workspaces (`sin/` and `con/`), and builds the Radar index on the `con/` workspace. Takes ~30 seconds on first run (embedder download).
+Generates a realistic Java e-commerce repo with 3 hidden semantic duplicates and builds the Radar index. Takes ~30 seconds on first run (embedder download).
 
-### Step 2 — Give Claude this prompt in each repo
+### Step 2 — Run the agent
 
-Open Claude Code in each workspace and paste the prompt below, or run the scripts to get token output automatically.
+Open Claude Code in `../prueba/con` and paste the prompt below, or run headlessly:
+
+```bash
+bash demo/arm_con.sh
+```
 
 **Prompt:**
 
@@ -92,35 +96,7 @@ amount — sale price plus the agent's commission. Follow the existing package c
 and reuse utilities where appropriate.
 ```
 
-**Without Radar** — open Claude Code in `../prueba/sin`, paste the prompt, and run `/cost` at the end to see token usage:
-
-```bash
-cd ../prueba/sin
-claude
-# paste the prompt, let it run, then type: /cost
-```
-
-Or run headlessly and get the token summary automatically:
-
-```bash
-bash demo/arm_sin.sh
-```
-
-**With Radar** — same in `../prueba/con`:
-
-```bash
-cd ../prueba/con
-claude
-# paste the prompt, let it run, then type: /cost
-```
-
-Or headlessly:
-
-```bash
-bash demo/arm_con.sh
-```
-
-Token summary from `/cost` (interactive) or printed at the end of each headless run:
+Token summary is printed at the end of the headless run:
 
 ```
 ==================================================
@@ -138,12 +114,9 @@ Token summary from `/cost` (interactive) or printed at the end of each headless 
 
 ### What to look for
 
-The repo already has `TaxCalculator.calculateTax(price, rate)` — same math as what both agents need to write. It also has `LevyEngine.applyLevy(amount, factor)` in the billing package: identical logic but with no tax/sale/commission vocabulary, so a keyword search misses it entirely.
+The repo already has `TaxCalculator.calculateTax(price, rate)` — same math as the function the agent needs to write. It also has `LevyEngine.applyLevy(amount, factor)` in the billing package: identical logic but with no tax/sale/commission vocabulary, so a keyword search misses it entirely.
 
-- **Without Radar**: the agent has no way to discover either function. It writes the arithmetic inline.
-- **With Radar**: one call to `find_similar_function` surfaces the match. The agent reads the source, recognises the duplicate, and imports it instead of reimplementing.
-
-The contrast is not just correctness — it's how the agent gets there. Without the tool, there is no discovery path on a repo too large to read exhaustively.
+One call to `find_similar_function` surfaces the match. The agent reads the source, recognises the duplicate, and imports it instead of reimplementing.
 
 ---
 ---
@@ -215,17 +188,21 @@ Antes de implementar cualquier función nueva, llamá `find_similar_function`.
 
 ## Cómo correr la demo
 
-### Paso 1 — Preparar los workspaces
+### Paso 1 — Preparar el workspace
 
 ```bash
 bash demo/run_prueba.sh
 ```
 
-Genera un repo Java de e-commerce realista con 3 duplicados semánticos ocultos, lo copia en dos workspaces idénticos (`sin/` y `con/`) y construye el índice Radar sobre el workspace `con/`. Tarda ~30 segundos la primera vez (descarga del embedder).
+Genera un repo Java de e-commerce realista con 3 duplicados semánticos ocultos y construye el índice Radar. Tarda ~30 segundos la primera vez (descarga del embedder).
 
-### Paso 2 — Dale este prompt a Claude en cada repo
+### Paso 2 — Correr el agente
 
-Abrí Claude Code en cada workspace y pegá el prompt de abajo, o corré los scripts para obtener el resumen de tokens automáticamente.
+Abrí Claude Code en `../prueba/con` y pegá el prompt de abajo, o correlo de forma automática:
+
+```bash
+bash demo/arm_con.sh
+```
 
 **Prompt:**
 
@@ -242,39 +219,10 @@ total — precio de venta más la comisión del agente. Seguir las convenciones 
 paquete existente y reutilizar utilidades donde corresponda.
 ```
 
-**Sin Radar** — abrí Claude Code en `../prueba/sin`, pegá el prompt y al terminar escribí `/cost` para ver el consumo:
-
-```bash
-cd ../prueba/sin
-claude
-# pegá el prompt, dejá que resuelva, después escribí: /cost
-```
-
-O de forma automática con el resumen al final:
-
-```bash
-bash demo/arm_sin.sh
-```
-
-**Con Radar** — igual en `../prueba/con`:
-
-```bash
-cd ../prueba/con
-claude
-# pegá el prompt, dejá que resuelva, después escribí: /cost
-```
-
-O de forma automática:
-
-```bash
-bash demo/arm_con.sh
-```
+El resumen de tokens se imprime al final de la ejecución automática.
 
 ### Qué mirar
 
-El repo ya tiene `TaxCalculator.calculateTax(price, rate)` — la misma matemática que los dos agentes necesitan escribir. También tiene `LevyEngine.applyLevy(amount, factor)` en el paquete de facturación: lógica idéntica pero sin ninguna palabra clave de comisión, venta ni impuesto, así que una búsqueda por texto no lo encuentra.
+El repo ya tiene `TaxCalculator.calculateTax(price, rate)` — la misma matemática que la función que el agente necesita escribir. También tiene `LevyEngine.applyLevy(amount, factor)` en el paquete de facturación: lógica idéntica pero sin ninguna palabra clave de comisión, venta ni impuesto, así que una búsqueda por texto no lo encuentra.
 
-- **Sin Radar**: el agente no tiene forma de descubrir ninguna de las dos funciones. Escribe la aritmética inline.
-- **Con Radar**: una llamada a `find_similar_function` devuelve el candidato. El agente lee el código fuente, reconoce el duplicado y lo importa en lugar de reimplementarlo.
-
-El contraste no es solo de corrección — es cómo el agente llega al resultado. Sin la herramienta, no hay camino de descubrimiento en un repo demasiado grande para leer exhaustivamente.
+Una llamada a `find_similar_function` devuelve el candidato. El agente lee el código fuente, reconoce el duplicado y lo importa en lugar de reimplementarlo.
