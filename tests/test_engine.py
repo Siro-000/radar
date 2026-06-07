@@ -5,7 +5,7 @@ import radar.engine.engine as engine_module
 from radar.engine.engine import find_similar_function
 from radar.engine.index import SearchResult
 from radar.engine.models import Function, QueryResult
-from radar.engine.config import DUPLICATE_THRESHOLD, SIMILAR_THRESHOLD
+from radar.engine.config import RETRIEVAL_FLOOR
 
 
 def make_fn(name: str, score: float) -> SearchResult:
@@ -33,27 +33,36 @@ def _set_mock_index(results: list[SearchResult]) -> None:
     engine_module._index = mock
 
 
-def test_verdict_duplicate():
-    _set_mock_index([make_fn("calculateTax", DUPLICATE_THRESHOLD + 0.01)])
+def test_verdict_candidate_above_floor():
+    _set_mock_index([make_fn("calculateTax", RETRIEVAL_FLOOR + 0.01)])
     with patch("radar.engine.engine.embed", return_value=[0.1] * 768):
         result = find_similar_function("public double applyTax(...) {}")
-    assert result.verdict == "duplicate"
+    assert result.verdict == "candidate"
     assert len(result.matches) == 1
 
 
-def test_verdict_similar():
-    _set_mock_index([make_fn("calculateTax", SIMILAR_THRESHOLD + 0.01)])
-    with patch("radar.engine.engine.embed", return_value=[0.1] * 768):
-        result = find_similar_function("public double applyTax(...) {}")
-    assert result.verdict == "similar"
-
-
-def test_verdict_novel():
-    _set_mock_index([make_fn("calculateTax", SIMILAR_THRESHOLD - 0.01)])
+def test_verdict_not_duplicate_below_floor():
+    _set_mock_index([make_fn("calculateTax", RETRIEVAL_FLOOR - 0.01)])
     with patch("radar.engine.engine.embed", return_value=[0.1] * 768):
         result = find_similar_function("public void unrelated() {}")
-    assert result.verdict == "novel"
+    assert result.verdict == "not_duplicate"
     assert result.matches == []
+
+
+def test_not_duplicate_when_index_empty():
+    _set_mock_index([])
+    with patch("radar.engine.engine.embed", return_value=[0.1] * 768):
+        result = find_similar_function("public void foo() {}")
+    assert result.verdict == "not_duplicate"
+    assert result.matches == []
+
+
+def test_returns_only_top_one():
+    _set_mock_index([make_fn("calculateTax", 0.92), make_fn("applyDiscount", 0.80)])
+    with patch("radar.engine.engine.embed", return_value=[0.1] * 768):
+        result = find_similar_function("public double applyTax(...) {}")
+    assert len(result.matches) == 1
+    assert result.matches[0].name == "calculateTax"
 
 
 def test_result_has_all_contract_fields():
@@ -70,6 +79,7 @@ def test_result_has_all_contract_fields():
     assert ":" in m.location
     assert m.summary
     assert m.import_statement
+    assert m.source_code  # the agent needs the source to judge duplication
     assert 0.0 <= m.similarity <= 1.0
 
 

@@ -35,13 +35,14 @@ def _log(msg: str) -> None:
 @mcp.tool(
     name="find_similar_function",
     description=(
-        "Check whether a function with this logic ALREADY EXISTS in the indexed "
-        "repository before you write it. Detects semantic duplication (same logic, "
-        "different syntax), not textual copy/paste. Call this BEFORE writing any new "
-        "function. If the verdict is 'duplicate', reuse the existing function via the "
-        "returned `import_statement` instead of rewriting it. If 'similar', review the "
-        "matches before deciding. If 'novel', no equivalent exists — write it. "
-        "Pass the full source of the function you intend to write as `code`."
+        "Before writing a new function, retrieve the most similar existing function "
+        "in the indexed repository (semantic search over code, not text matching). "
+        "Call this BEFORE writing any new function, passing the full source you intend "
+        "to write as `code`. Radar does NOT decide duplication — YOU do. "
+        "If verdict is 'not_duplicate', nothing similar exists; write your function. "
+        "If verdict is 'candidate', read the returned match's `source_code`: if it "
+        "implements the same logic as what you were about to write, reuse it via the "
+        "match's `import_statement` instead of rewriting; otherwise write your own."
     ),
 )
 def find_similar_function(

@@ -36,41 +36,52 @@ The online path **never reindexes**. It only embeds the incoming snippet and sea
 the prebuilt index. Indexing artifacts (FAISS index + metadata store) are produced
 offline and loaded at engine startup.
 
-## The contract — FROZEN
+## The contract — HYBRID (retrieve, agent judges)
 
 This is the interface everything depends on. **Do not change the signature or the
 field names without telling the whole team.** Adapters, the engine, and the eval all
 agree on exactly this.
+
+Radar does **not** make the duplicate decision. It is a deterministic retriever: it
+surfaces the single best existing candidate (with its source) when similarity clears
+a low recall floor, and the **agent** judges whether it's truly a duplicate. This
+removes the brittle, precision-critical duplicate threshold (and its calibration /
+data-leakage problems) and pushes the precision decision to the agent, which can read
+the actual code instead of trusting a noisy cosine score.
 
 ```
 find_similar_function({
   code: string,        // required: the function the agent is about to write
   language?: string,   // optional, default inferred ("java")
   intent?: string,     // optional: NL description of what it's trying to do
-  top_k?: int          // optional, default 3
+  top_k?: int          // optional, search breadth; the response returns the top-1
 }) -> {
-  query_id: string,                            // event id (telemetry)
-  verdict: "duplicate" | "similar" | "novel",  // decided server-side vs threshold
-  matches: [
+  query_id: string,                       // event id (telemetry)
+  verdict: "not_duplicate" | "candidate", // server only asserts the safe negative
+  matches: [                              // empty if not_duplicate; top-1 if candidate
     {
       match_id: string,         // stable id of the PAIR (query <-> candidate)
-      name: string,             // "parse_dates"
-      signature: string,        // "def parse_dates(s: str, tz: str = 'UTC') -> datetime"
-      location: string,         // "utils/dates.py:42-58"
+      name: string,             // "calculateTax"
+      signature: string,        // "public double calculateTax(double price, double rate)"
+      location: string,         // "src/com/acme/finance/TaxCalculator.java:6-10"
       summary: string,          // 1 line, precomputed at index time (no LLM)
-      import_statement: string, // "from utils.dates import parse_dates"  <- the actionable part
-      similarity: float         // 0.0–1.0
+      import_statement: string, // "import static ...TaxCalculator.calculateTax;"
+      source_code: string,      // FULL source — what the agent reads to judge duplication
+      similarity: float         // 0.0–1.0, a hint (NOT a verdict)
     }
   ]
 }
 ```
 
-- `verdict` is decided server-side: high score → `duplicate`, mid band → `similar`,
-  below → `novel`.
-- The **threshold is server-side config**, never a tool parameter the agent can set
-  or loosen.
-- The response must be **actionable**: `import_statement` is what makes the agent
-  reuse instead of regenerate. Returning "duplicate: 0.9" alone is not enough.
+- `verdict` is **only** the safe negative: `not_duplicate` when the top similarity is
+  below `RETRIEVAL_FLOOR`; otherwise `candidate` (the agent decides from the source).
+- The **floor is server-side config** and recall-oriented — the agent is the precision
+  stage. `similarity` is returned as a hint, never as the decision.
+- The response must be **actionable**: `source_code` lets the agent verify, and
+  `import_statement` is what makes it reuse instead of regenerate.
+- **Determinism is preserved in Radar's output** (same input → same candidate + score);
+  only the final duplicate judgment moves to the (non-deterministic) agent. A
+  deterministic CI gate would re-add a high-precision threshold on top of this.
 
 ## Tech stack
 
@@ -202,15 +213,17 @@ Order: make N0–N3 pass first, then run N4 on the curated case and record the b
 
 ## Conventions and invariants — do not break
 
-- **Determinism.** The query path must be reproducible: same input → same output.
-  No randomness, no network calls, **no LLM in the query critical path**. This is the
-  product's whole differentiator (it's what enables a CI gate).
-- **No LLM in the hot path.** `summary` and `import_statement` are precomputed at index
-  time. An optional LLM rerank over the top candidates is out of MVP scope.
+- **Determinism (of Radar's output).** The retrieval path is reproducible: same input
+  → same candidate + score. No randomness, no network calls, **no LLM inside Radar**.
+  The duplicate *judgment* now lives in the agent (non-deterministic by design); a
+  deterministic CI gate would re-add a high-precision threshold on top of the retriever.
+- **No LLM in Radar's hot path.** `summary`, `import_statement` and `source_code` are
+  precomputed/stored at index time; Radar only embeds + searches + applies the floor.
 - **Offline vs online split.** Indexing is offline; the online query never reindexes.
-- **Threshold is server-side**, calibrated offline for **precision over recall** —
-  a false positive (agent reuses something it shouldn't) introduces a subtle bug, and
-  false positives are the #1 product risk. Better to miss a duplicate than flag a fake one.
+- **Recall floor, not a precision threshold.** `RETRIEVAL_FLOOR` is server-side and
+  deliberately low: it decides only *what to surface*, not what counts as a duplicate.
+  Over-surfacing is cheap (the agent reads the source and rejects it); a missed
+  candidate is not recoverable. The agent is the precision stage.
 - **`match_id` identifies the pair** (query ↔ candidate), not just the candidate.
 - **MCP stdio hygiene.** The server must write **only MCP protocol to stdout**. All
   logging goes to **stderr**. A stray `print()` to stdout corrupts the stdio transport —

@@ -1,12 +1,15 @@
-# Detection thresholds — calibrated offline against data/heldout.json (RADAR-008).
+# HYBRID design — single retrieval floor (see CLAUDE.md "The contract").
 #
-# `radar-eval --sweep` over the held-out set: precision=recall=F1=1.0 across the
-# whole [0.64, 0.70] plateau. The lowest true duplicate scores 0.722 and the
-# highest hard-negative (a fibonacci loop vs. an iterative factorial) scores 0.631.
-# We pick 0.70 inside that plateau: it favours PRECISION (the #1 product risk is a
-# false positive) by keeping a ~0.07 margin above the highest negative, while still
-# catching every planted duplicate. SIMILAR sits below it so borderline matches
-# (0.60–0.70) come back as "similar" for the agent to review rather than auto-reuse.
-DUPLICATE_THRESHOLD = 0.70
-SIMILAR_THRESHOLD = 0.60
+# Radar no longer makes the duplicate decision with a precision-critical threshold.
+# It returns the top candidate's SOURCE when the top similarity clears this floor,
+# and the AGENT judges duplication by reading the code. The floor is therefore a
+# RECALL-oriented gate ("is anything worth showing at all?"), not a precision
+# boundary — the agent is the precision stage.
+#
+# Chosen conservatively and deliberately LOW: true near-duplicates we observed score
+# >= ~0.62 (via the engine's query path), clear negatives <= ~0.52. It is NOT finely
+# tuned to the held-out set, so it is not sensitive to calibration-set leakage —
+# over-surfacing a weak candidate is cheap (the agent rejects it after reading it),
+# whereas a missed candidate is not recoverable.
+RETRIEVAL_FLOOR = 0.55
 DEFAULT_TOP_K = 3

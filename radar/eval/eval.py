@@ -1,13 +1,15 @@
 """
-RADAR-008: precision/recall + threshold calibration.
+RADAR-008: retrieval-floor calibration (precision/recall).
 
-Runs the engine over a held-out set of known duplicate / non-duplicate pairs and
-reports precision, recall and F1 at a given detection threshold. This is where the
-threshold is calibrated — against ground truth, NOT through the agent.
+In the HYBRID design Radar no longer decides duplication — the agent does. So this
+measures RETRIEVAL quality: for each held-out case, is the expected function the
+top-1 neighbour AND above the floor? Precision here = how often surfacing fired
+correctly; recall = how often a true duplicate was surfaced. The floor is recall-
+oriented (the agent is the precision stage), so favour recall when reading these.
 
 Usage:
-    radar-eval                      # eval at the configured DUPLICATE_THRESHOLD
-    radar-eval --threshold 0.80     # eval at a specific threshold
+    radar-eval                      # eval at the configured RETRIEVAL_FLOOR
+    radar-eval --threshold 0.60     # eval at a specific floor
     radar-eval --sweep              # sweep the full range, recommend the best one
 
 The query is embedded exactly as engine.find_similar_function embeds it (raw source),
@@ -117,11 +119,12 @@ def run(repo: str, index_path: str, heldout: str, threshold: float | None, sweep
                       f"R={r['recall']:.3f}  F1={r['f1']:.3f}{mark}")
         _print_breakdown(cases, best["threshold"])
         _print_metrics(best)
-        print(f"\nRecommended DUPLICATE_THRESHOLD = {best['threshold']:.2f} "
-              f"(currently {config.DUPLICATE_THRESHOLD:.2f})")
+        print(f"\nMax-F1 RETRIEVAL_FLOOR = {best['threshold']:.2f} "
+              f"(currently {config.RETRIEVAL_FLOOR:.2f}). Note: prefer a LOWER floor "
+              f"for recall — the agent is the precision stage.")
         return 0
 
-    t = threshold if threshold is not None else config.DUPLICATE_THRESHOLD
+    t = threshold if threshold is not None else config.RETRIEVAL_FLOOR
     m = _score_at(cases, t)
     _print_breakdown(cases, t)
     _print_metrics(m)

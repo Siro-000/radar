@@ -29,9 +29,10 @@ bash demo/scripted_demo.sh
 
 Shows, with no model-in-the-loop nondeterminism:
 1. a function an agent is about to write,
-2. Radar's answer: `verdict: duplicate` + the `import_statement` to reuse,
-3. the **determinism cherry** — the same query run twice is byte-identical,
-4. `precision = recall = 1.0` on the held-out set.
+2. Radar's answer: `verdict: candidate` + the matched `source_code` and
+   `import_statement` (Radar surfaces it; the agent decides if it's a duplicate),
+3. the **determinism cherry** — Radar's output is byte-identical across two runs,
+4. the held-out retrieval numbers (recall-oriented floor; the agent is precision).
 
 ---
 
