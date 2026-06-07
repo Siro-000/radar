@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 radar = "radar.adapters.cli:main"
+radar-eval = "radar.eval.eval:main"
 
 [dependency-groups]
 dev = [

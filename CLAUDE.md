@@ -120,32 +120,39 @@ people meet.
 
 ## Commands
 
-> Fill these in as the code lands; keep this section current.
+Tooling is `uv` (see `pyproject.toml`; Python 3.12). The `radar` and `radar-eval`
+console scripts are the entry points.
 
 ```bash
-# install
-pip install -e .
+# install (creates .venv, fetches Python 3.12 + deps, incl. the embedder on first run)
+uv sync
 
-# build the index for a repo (offline)
-python -m radar.engine.index build ./radar/data/seed_repo
+# build the index for a repo (offline) -> writes index.faiss + metadata.json
+uv run radar index --repo data/seed_repo --index-path .radar-index
 
-# query via CLI (dev + demo fallback)
-python -m radar.adapters.cli "def my_func(...): ..."
+# query via CLI (dev + demo fallback) — prints the QueryResult as JSON
+uv run radar query --index-path .radar-index 'public static double f(...) { ... }'
 
-# run the MCP server (stdio)
-python -m radar.adapters.mcp_server
+# run the MCP stdio server (builds the index from --repo if --index-path is empty)
+uv run radar serve --repo data/seed_repo --index-path .radar-index
 
-# run tests (N0/N2 + contract shape)
-pytest
+# run tests
+uv run pytest
 
-# eval: precision/recall against the held-out set (N1 — calibrate the threshold here)
-python -m radar.eval.eval
+# eval: precision/recall on the held-out set; --sweep recommends a threshold (N1)
+uv run radar-eval
+uv run radar-eval --sweep
 
-# register the MCP server with Claude Code for the agent demo (use an ABSOLUTE path)
-claude mcp add --transport stdio radar -- python /abs/path/to/radar/adapters/mcp_server.py
-claude mcp list          # verify it registered; inside a session, /mcp shows status
-# --scope project writes .mcp.json (committable, shared with the team)
+# the project .mcp.json already registers `radar` for Claude Code in this repo.
+claude mcp list          # shows `radar` as ✓ Connected; inside a session, /mcp too
+
+# demos (see demo/README.md)
+bash demo/scripted_demo.sh                 # deterministic, no agent
+bash demo/run_ab.sh                        # live agent A/B (with vs without the tool)
 ```
+
+> macOS note: native OpenMP workarounds (`KMP_DUPLICATE_LIB_OK`, `OMP_NUM_THREADS`)
+> are set in `radar/__init__.py`; without them faiss+torch can SIGSEGV (exit 139).
 
 ## Testing
 

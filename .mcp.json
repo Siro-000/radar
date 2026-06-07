@@ -7,7 +7,7 @@
         "radar",
         "serve",
         "--repo",
-        ".",
+        "data/seed_repo",
         "--index-path",
         ".radar-index"
       ]

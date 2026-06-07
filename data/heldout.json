@@ -1,0 +1,62 @@
+[
+  {
+    "name": "factorial_recursive",
+    "query_code": "public static long fact(int k) {\n    if (k <= 1) {\n        return 1;\n    }\n    return k * fact(k - 1);\n}",
+    "expected_match": "factorial",
+    "is_duplicate": true
+  },
+  {
+    "name": "count_vowels_variant",
+    "query_code": "public int vowelCount(String input) {\n    int hits = 0;\n    for (char ch : input.toLowerCase().toCharArray()) {\n        if (\"aeiou\".indexOf(ch) >= 0) {\n            hits++;\n        }\n    }\n    return hits;\n}",
+    "expected_match": "countVowels",
+    "is_duplicate": true
+  },
+  {
+    "name": "discount_variant",
+    "query_code": "public static double discounted(double cost, double percent) {\n    return cost - (cost * percent / 100);\n}",
+    "expected_match": "applyDiscount",
+    "is_duplicate": true
+  },
+  {
+    "name": "capitalize_variant",
+    "query_code": "public static String upperFirst(String word) {\n    if (word == null || word.length() == 0) {\n        return word;\n    }\n    return word.substring(0, 1).toUpperCase() + word.substring(1);\n}",
+    "expected_match": "capitalize",
+    "is_duplicate": true
+  },
+  {
+    "name": "average_variant",
+    "query_code": "public static double mean(List<Integer> values) {\n    int sum = 0;\n    for (Integer v : values) {\n        sum += v;\n    }\n    return (double) sum / values.size();\n}",
+    "expected_match": "average",
+    "is_duplicate": true
+  },
+  {
+    "name": "valid_email_variant",
+    "query_code": "public static boolean checkEmail(String addr) {\n    if (addr == null) {\n        return false;\n    }\n    int atPos = addr.indexOf('@');\n    int dotPos = addr.lastIndexOf('.');\n    return atPos > 0 && dotPos > atPos + 1 && dotPos < addr.length() - 1;\n}",
+    "expected_match": "isValidEmail",
+    "is_duplicate": true
+  },
+  {
+    "name": "bubble_sort_negative",
+    "query_code": "public static void bubbleSort(int[] arr) {\n    for (int i = 0; i < arr.length - 1; i++) {\n        for (int j = 0; j < arr.length - 1 - i; j++) {\n            if (arr[j] > arr[j + 1]) {\n                int tmp = arr[j];\n                arr[j] = arr[j + 1];\n                arr[j + 1] = tmp;\n            }\n        }\n    }\n}",
+    "expected_match": null,
+    "is_duplicate": false
+  },
+  {
+    "name": "fibonacci_negative",
+    "query_code": "public static long fibonacci(int n) {\n    long a = 0;\n    long b = 1;\n    for (int i = 0; i < n; i++) {\n        long next = a + b;\n        a = b;\n        b = next;\n    }\n    return a;\n}",
+    "expected_match": null,
+    "is_duplicate": false
+  },
+  {
+    "name": "celsius_to_fahrenheit_negative",
+    "query_code": "public static double toFahrenheit(double celsius) {\n    double scaled = celsius * 9 / 5;\n    double result = scaled + 32;\n    return result;\n}",
+    "expected_match": null,
+    "is_duplicate": false
+  },
+  {
+    "name": "std_dev_negative",
+    "query_code": "public static double standardDeviation(double[] data) {\n    double sum = 0;\n    for (double d : data) {\n        sum += d;\n    }\n    double avg = sum / data.length;\n    double sq = 0;\n    for (double d : data) {\n        sq += (d - avg) * (d - avg);\n    }\n    return Math.sqrt(sq / data.length);\n}",
+    "expected_match": null,
+    "is_duplicate": false
+  }
+]

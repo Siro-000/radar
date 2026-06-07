@@ -1,4 +1,7 @@
 artifacts/
+.radar-index/
+.radar-eval-index/
+demo/big_repo/
 .env
 __pycache__/
 *.py[cod]
